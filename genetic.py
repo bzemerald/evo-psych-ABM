@@ -100,6 +100,8 @@ class Gene:
 
     def mutate(self):
         """Return a new mutated gene."""
+        if self.num_alleles <= 1:
+            return self.duplicate()
         new_allele = self.allele
         while new_allele == self.allele:
             new_allele = rng.integers(1, self.num_alleles + 1)
