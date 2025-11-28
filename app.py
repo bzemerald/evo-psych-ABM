@@ -1,6 +1,9 @@
-from model import Sugarscape
+from run import create_model, EMPTY_GENOME, AGENT_PARAMS, AGENT_LOGICS
 from mesa.visualization import Slider, SolaraViz, SpaceRenderer, make_plot_component
 from mesa.visualization.components import AgentPortrayalStyle, PropertyLayerStyle
+from matplotlib.figure import Figure
+import numpy as np
+import solara
 RED = "#ff0000"
 GREEN = "#00ff00"
 BLUE = "#0000ff"
@@ -83,12 +86,61 @@ def propertylayer_portrayal(layer):
     )
 
 
-def post_process(chart):
-    chart = chart.properties(width=400, height=400)
-    return chart
+def post_process(ax):
+    ax.set_aspect("equal")
+    return ax
+
+
+def make_gene_freq_component(gene_name: str, page: int = 1, alpha: float = 0.6):
+    """
+    Create a Matplotlib stacked area plot component for the relative
+    allele frequencies of a single gene, using data from the model's
+    DataCollector.
+
+    The DataCollector is expected to have a model_reporter column
+    named f\"{gene_name}_freqs\" that stores a 1D numpy array of
+    relative frequencies per time step.
+
+    The `alpha` parameter controls the transparency of the stacked areas.
+    """
+
+    def component(model):
+        df = model.datacollector.get_model_vars_dataframe()
+        col = f"{gene_name}_freqs"
+
+        fig = Figure(figsize=(4, 2.5))
+        ax = fig.subplots()
+
+        if col in df.columns and not df.empty:
+            # Each entry in the column should be an array of allele frequencies
+            data = [np.asarray(v) for v in df[col] if v is not None]
+
+            if data:
+                arr = np.vstack(data)  # shape: (T, num_alleles)
+                steps = np.arange(arr.shape[0])
+                ys = [arr[:, i] for i in range(arr.shape[1])]
+
+                stacks = ax.stackplot(steps, *ys, alpha=alpha)
+                ax.set_ylim(0, 1)
+
+                # Legend: one entry per allele
+                labels = [f"allele {i + 1}" for i in range(arr.shape[1])]
+                ax.legend(stacks, labels, loc="upper right")
+
+        ax.set_title(f"{gene_name} allele frequencies")
+        ax.set_xlabel("Step")
+        ax.set_ylabel("Relative frequency")
+
+        return solara.FigureMatplotlib(fig)
+
+    return (component, page)
 
 
 model_params = {
+    # Fixed, non-user-adjustable parameters required by Sugarscape.__init__
+    "empty_genome": EMPTY_GENOME,
+    "agent_params": AGENT_PARAMS,
+    "agent_logics": AGENT_LOGICS,
     "seed": {
         "type": "InputText",
         "value": 42,
@@ -103,20 +155,19 @@ model_params = {
     # Agent endowment parameters
     "endowment_min": Slider("Min Initial Endowment", value=25, min=5, max=30, step=1),
     "endowment_max": Slider("Max Initial Endowment", value=50, min=30, max=100, step=1),
-    # Metabolism parameters
-    "metabolism_min": Slider("Min Metabolism", value=1, min=1, max=3, step=1),
-    "metabolism_max": Slider("Max Metabolism", value=5, min=3, max=8, step=1),
-    # Vision parameters
-    "vision_min": Slider("Min Vision", value=1, min=1, max=3, step=1),
-    "vision_max": Slider("Max Vision", value=5, min=3, max=8, step=1),
-    # no trade toggle here – sugar-only model
+    # # Metabolism parameters
+    # "metabolism_min": Slider("Min Metabolism", value=1, min=1, max=3, step=1),
+    # "metabolism_max": Slider("Max Metabolism", value=5, min=3, max=8, step=1),
+    # # Vision parameters
+    # "vision_min": Slider("Min Vision", value=1, min=1, max=3, step=1),
+    # "vision_max": Slider("Max Vision", value=5, min=3, max=8, step=1),
 }
 
-# instantiate sugar-only model
-model = Sugarscape()
+# instantiate sugar-only model via helper in run.py
+model = create_model()
 
-# Space renderer (Altair backend)
-renderer = SpaceRenderer(model, backend="altair").render(
+# Space renderer (Matplotlib backend)
+renderer = SpaceRenderer(model, backend="matplotlib").render(
     agent_portrayal=agent_portrayal,
     propertylayer_portrayal=propertylayer_portrayal,
     post_process=post_process,
@@ -129,6 +180,7 @@ page = SolaraViz(
     components=[
         # matches model_reporters={"#Agents": ...} in Sugarscape
         make_plot_component("#Agents", page=1),
+        *[make_gene_freq_component(gene, page=1, alpha=0.5) for gene in model.gene_names],
     ],
     model_params=model_params,
     name="Sugarscape",

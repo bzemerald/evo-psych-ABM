@@ -161,6 +161,16 @@ class LociCollection:
             self.by_name[a.name].append(a)
             self.by_chrom[a.chromosome][a.name].append(a)
 
+    @property
+    def is_gendered(self) -> bool:
+        '''
+        Returns True if the collection defines any loci on sex chromosomes (X or Y),
+        regardless of whether alleles are currently present.
+        '''
+        has_x = bool(self.by_chrom["X"])
+        has_y = bool(self.by_chrom["Y"])
+        return has_x or has_y
+    
     def __str__(self) -> str:
         result = "{"
         first = True
