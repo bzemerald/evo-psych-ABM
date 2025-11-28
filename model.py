@@ -92,7 +92,7 @@ class Sugarscape(mesa.Model):
 
     def step(self):
         """
-        Step function for sugar-only Sugarscape:
+        Step function for Sugarscape:
         1) regenerate sugar
         2) move/eat/die for agents
         3) collect data
