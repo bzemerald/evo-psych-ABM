@@ -32,13 +32,18 @@ class Sugarscape(mesa.Model):
     def __init__(
         self,
         empty_genome: EmptyLociCollection,
-        agent_params: AgentParams,
         agent_logics: AgentLogicProtocol,
-        width=50,
-        height=50,
-        initial_population=200,
-        endowment_min=25,
-        endowment_max=50,
+        width: int = 50,
+        height: int = 50,
+        initial_population: int = 200,
+        endowment: int = 25,
+        initial_sugar: int = 0,
+        reproduction_age: int = 10,
+        reproduction_check_radius: int = 1,
+        reproduction_cooldown: int = 5,
+        max_age: int = 80,
+        max_sugar:int = 50,
+        max_children: int = 100,
         vision_min: int = 1,
         vision_max: int = 5,
         metabolism_min: int = 1,
@@ -54,7 +59,17 @@ class Sugarscape(mesa.Model):
         self.empty_genome = empty_genome
         self.gene_names = list(self.empty_genome.by_name.keys())
         self.is_gendered = empty_genome.is_gendered
-        self.agent_params, self.agent_logics = agent_params, agent_logics
+        # construct AgentParams from keyword arguments
+        self.agent_params = AgentParams(
+            initial_sugar=initial_sugar,
+            reproduction_age=reproduction_age,
+            reproduction_check_radius=reproduction_check_radius,
+            reproduction_cooldown=reproduction_cooldown,
+            max_age=max_age,
+            max_children=max_children,
+            max_sugar=max_sugar
+        )
+        self.agent_logics = agent_logics
         # trait and mutation parameters (ensure min <= max)
         self.vision_min, self.vision_max = sorted((vision_min, vision_max))
         self.metabolism_min, self.metabolism_max = sorted(
@@ -122,9 +137,7 @@ class Sugarscape(mesa.Model):
             genotype=ini_genotypes,
             params=self.agent_params,
             logics=self.agent_logics,
-            sugar=self.rng.integers(
-                endowment_min, endowment_max, (initial_population,), endpoint=True
-            )
+            sugar=endowment,
         )
 
     def step(self):

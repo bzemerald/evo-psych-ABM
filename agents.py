@@ -39,6 +39,7 @@ class AgentParams:
     reproduction_age: int
     reproduction_check_radius: int
     reproduction_cooldown: int
+    max_sugar: int
     max_children: int
     max_age: int
 
@@ -89,7 +90,7 @@ class DefaultAgentLogics(AgentLogicProtocol):
         return (any(has_empty) and 
                 agent.age >= agent.params.reproduction_age and
                 agent.breed_cooldown == 0 and
-                agent.num_children >= agent.params.max_children)
+                agent.num_children <= agent.params.max_children)
 
     def wants_to_breed_with(
         self, agent: "SugarscapeAgent", other: "SugarscapeAgent"
@@ -272,5 +273,5 @@ class SugarscapeAgent(CellAgent):
             return False
         return self.logics.can_breed(self)
 
-    def wants_to_breed_with(self, other: "SugarscapeAgent") -> bool:
+    def wants_to_breed_with(self, other: SugarscapeAgent) -> bool:
         return self.logics.wants_to_breed_with(self, other)

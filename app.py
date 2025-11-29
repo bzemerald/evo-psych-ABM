@@ -1,4 +1,4 @@
-from run import create_model, EMPTY_GENOME, AGENT_PARAMS, AGENT_LOGICS
+from run import create_model, EMPTY_GENOME, AGENT_LOGICS
 from mesa.visualization import Slider, SolaraViz, SpaceRenderer, make_plot_component
 from mesa.visualization.components import AgentPortrayalStyle, PropertyLayerStyle
 from matplotlib.figure import Figure
@@ -139,16 +139,15 @@ def make_gene_freq_component(gene_name: str, page: int = 1, alpha: float = 0.6):
 model_params = {
     # Fixed, non-user-adjustable parameters required by Sugarscape.__init__
     "empty_genome": EMPTY_GENOME,
-    "agent_params": AGENT_PARAMS,
     "agent_logics": AGENT_LOGICS,
     # Genetic / trait parameters
     "mutation_rate": Slider(
-        "Mutation rate", value=0.01, min=0.0, max=0.2, step=0.01
+        "Mutation rate", value=0.05, min=0.0, max=0.2, step=0.01
     ),
-    "vision_min": Slider("Min Vision", value=1, min=1, max=5, step=1),
-    "vision_max": Slider("Max Vision", value=4, min=1, max=8, step=1),
-    "metabolism_min": Slider("Min Metabolism", value=1, min=1, max=5, step=1),
-    "metabolism_max": Slider("Max Metabolism", value=4, min=1, max=8, step=1),
+    "vision_min": Slider("Min Vision", value=2, min=1, max=5, step=1),
+    "vision_max": Slider("Max Vision", value=5, min=1, max=8, step=1),
+    "metabolism_min": Slider("Min Metabolism", value=2, min=1, max=5, step=1),
+    "metabolism_max": Slider("Max Metabolism", value=5, min=1, max=8, step=1),
     "seed": {
         "type": "InputText",
         "value": 42,
@@ -161,14 +160,30 @@ model_params = {
         "Initial Population", value=200, min=50, max=500, step=10
     ),
     # Agent endowment parameters
-    "endowment_min": Slider("Min Initial Endowment", value=25, min=5, max=30, step=1),
-    "endowment_max": Slider("Max Initial Endowment", value=50, min=30, max=100, step=1),
-    # # Metabolism parameters
-    # "metabolism_min": Slider("Min Metabolism", value=1, min=1, max=3, step=1),
-    # "metabolism_max": Slider("Max Metabolism", value=5, min=3, max=8, step=1),
-    # # Vision parameters
-    # "vision_min": Slider("Min Vision", value=1, min=1, max=3, step=1),
-    # "vision_max": Slider("Max Vision", value=5, min=3, max=8, step=1),
+    "endowment": Slider("Initial Endowment", value=10, min=5, max=20, step=1),
+
+    # Agent parameters (map directly to Sugarscape.__init__)
+    "initial_sugar": Slider(
+        "Newborn agents base sugar", value=0, min=-20, max=10, step=1
+    ),
+    "reproduction_age": Slider(
+        "Reproduction age", value=10, min=1, max=50, step=1
+    ),
+    "reproduction_check_radius": Slider(
+        "Reproduction radius", value=1, min=1, max=5, step=1
+    ),
+    "reproduction_cooldown": Slider(
+        "Reproduction cooldown", value=5, min=0, max=50, step=1
+    ),
+    "max_sugar": Slider(
+        "Max sugar", value=50, min=10, max=200, step=5
+    ),
+    "max_children": Slider(
+        "Max children per agent", value=100, min=0, max=100, step=1
+    ),
+    "max_age": Slider(
+        "Max age", value=80, min=1, max=200, step=1
+    ),
 }
 
 # instantiate sugar-only model via helper in run.py

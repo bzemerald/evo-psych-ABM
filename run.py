@@ -74,11 +74,12 @@ EMPTY_GENOME = EmptyLociCollection(
 
 # Default agent parameters
 AGENT_PARAMS = AgentParams(
-    max_children = 1000,
     initial_sugar=0,
     reproduction_age=10,
     reproduction_check_radius=1,
     reproduction_cooldown=5,
+    max_sugar=50,
+    max_children=1000,
     max_age=80,
 )
 
@@ -98,8 +99,14 @@ def create_model(**kwargs) -> Sugarscape:
     """
     params = dict(
         empty_genome=EMPTY_GENOME,
-        agent_params=AGENT_PARAMS,
         agent_logics=AGENT_LOGICS,
+        initial_sugar=AGENT_PARAMS.initial_sugar,
+        reproduction_age=AGENT_PARAMS.reproduction_age,
+        reproduction_check_radius=AGENT_PARAMS.reproduction_check_radius,
+        reproduction_cooldown=AGENT_PARAMS.reproduction_cooldown,
+        max_sugar=AGENT_PARAMS.max_sugar,
+        max_children=AGENT_PARAMS.max_children,
+        max_age=AGENT_PARAMS.max_age,
     )
     params.update(kwargs)
     return Sugarscape(**params)
