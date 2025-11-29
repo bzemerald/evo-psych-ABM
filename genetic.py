@@ -62,10 +62,29 @@ class Gene:
         cls.name = cls.__name__
         if cls is not Gene:
             Gene.loci_registry[cls.name] = cls
-        # cache allele instances
-        cls.allele_registry: dict[int, Gene] = {}
+        # initialize allele registry based on current num_alleles
+        cls._init_allele_registry()
+
+    @classmethod
+    def _init_allele_registry(cls) -> None:
+        """(Re)initialize the allele registry for this Gene subclass."""
+        cls.allele_registry: dict[int, "Gene"] = {}
         for a in range(1, cls.num_alleles + 1):
             cls.allele_registry[a] = cls(a)
+
+    @classmethod
+    def set_num_alleles(cls, num_alleles: int) -> None:
+        """
+        Dynamically change the number of alleles for this Gene subclass.
+
+        This updates `cls.num_alleles` and rebuilds `allele_registry`.
+        Existing allele instances from older configurations are discarded;
+        new calls will use the updated registry.
+        """
+        if num_alleles <= 0:
+            raise ValueError("num_alleles must be a positive integer")
+        cls.num_alleles = int(num_alleles)
+        cls._init_allele_registry()
 
     def __new__(cls, allele) -> Self:
         if allele <= 0 or allele > cls.num_alleles:

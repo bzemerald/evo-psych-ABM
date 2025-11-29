@@ -39,19 +39,39 @@ class Sugarscape(mesa.Model):
         initial_population=200,
         endowment_min=25,
         endowment_max=50,
-        # metabolism_min=1,
-        # metabolism_max=5,
-        # vision_min=1,
-        # vision_max=5,
+        vision_min: int = 1,
+        vision_max: int = 5,
+        metabolism_min: int = 1,
+        metabolism_max: int = 5,
+        mutation_rate: float = 0.05,
         seed=None,
     ):
         super().__init__(seed=seed)
+        if seed:
+            set_seed(seed) # sync up with numpy's rng in the genetic module
         # grid size
         self.width, self.height = width, height
         self.empty_genome = empty_genome
         self.gene_names = list(self.empty_genome.by_name.keys())
         self.is_gendered = empty_genome.is_gendered
         self.agent_params, self.agent_logics = agent_params, agent_logics
+        # trait and mutation parameters (ensure min <= max)
+        self.vision_min, self.vision_max = sorted((vision_min, vision_max))
+        self.metabolism_min, self.metabolism_max = sorted(
+            (metabolism_min, metabolism_max)
+        )
+        self.mutation_rate = mutation_rate
+        # apply mutation rate to all genes
+        Gene.mutation_rate = mutation_rate
+        # dynamically set num_alleles for vision / metabolism genes
+        vision_alleles = int(self.vision_max - self.vision_min + 1)
+        metabolism_alleles = int(self.metabolism_max - self.metabolism_min + 1)
+        vision_cls = Gene.loci_registry.get("VisionGene")
+        if vision_cls is not None:
+            vision_cls.set_num_alleles(vision_alleles)
+        metabolism_cls = Gene.loci_registry.get("MetabolismGene")
+        if metabolism_cls is not None:
+            metabolism_cls.set_num_alleles(metabolism_alleles)
         self.running = True
 
         # grid
@@ -104,13 +124,7 @@ class Sugarscape(mesa.Model):
             logics=self.agent_logics,
             sugar=self.rng.integers(
                 endowment_min, endowment_max, (initial_population,), endpoint=True
-            ),
-            # metabolism=self.rng.integers(
-            #     metabolism_min, metabolism_max, (initial_population,), endpoint=True
-            # ),
-            # vision=self.rng.integers(
-            #     vision_min, vision_max, (initial_population,), endpoint=True
-            # ),
+            )
         )
 
     def step(self):

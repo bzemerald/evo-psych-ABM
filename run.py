@@ -1,17 +1,6 @@
 from model import Sugarscape
-from agents import AgentParams, DefaultAgentLogics
+from agents import AgentParams, DefaultAgentLogics, SugarscapeAgent
 from genetic import EmptyLociCollection, Gene
-
-
-# ============================================================
-# Constants for gene-driven traits
-# ============================================================
-
-VISION_MIN = 1
-VISION_MAX = 5
-
-METABOLISM_MIN = 1
-METABOLISM_MAX = 5
 
 
 # ============================================================
@@ -25,7 +14,6 @@ class VisionGene(Gene):
 
 class MetabolismGene(Gene):
     """Gene controlling metabolism."""
-
 
 class ControlGene(Gene):
     """Neutral control gene (no direct effect used in logic)."""
@@ -42,16 +30,38 @@ class GeneticAgentLogics(DefaultAgentLogics):
     using MetabolismGene and VisionGene.
     """
 
+    @staticmethod
+    def _allele_to_int(allele_index: int, min_val: int, max_val: int, num_alleles: int) -> int:
+        """Map an allele index (1..num_alleles) to an integer in [min_val, max_val]."""
+        if num_alleles <= 1:
+            return int(min_val)
+        frac = (allele_index - 1) / (num_alleles - 1)
+        return int(round(min_val + frac * (max_val - min_val)))
+
+    def _gene_trait(self, agent, gene_name: str, min_val: int, max_val: int) -> int:
+        """Compute an integer trait value from the given gene using the agent's genotype."""
+        genes = agent.genotype.by_name.get(gene_name, [])
+        if not genes:
+            return int(round((min_val + max_val) / 2))
+        num_alleles = type(genes[0]).num_alleles
+        values = [
+            self._allele_to_int(g.allele, min_val, max_val, num_alleles) for g in genes
+        ]
+        trait = int(round(sum(values) / len(values)))
+        return max(min_val, min(max_val, trait))
+
     def metabolism(self, agent) -> int:
-        value = agent.genotype.phenotype("MetabolismGene")
-        scaled = METABOLISM_MIN + value * (METABOLISM_MAX - METABOLISM_MIN)
-        return max(METABOLISM_MIN, min(METABOLISM_MAX, int(round(scaled))))
+        m_min = int(agent.model.metabolism_min)
+        m_max = int(agent.model.metabolism_max)
+        return self._gene_trait(agent, "MetabolismGene", m_min, m_max)
 
     def vision(self, agent) -> int:
-        value = agent.genotype.phenotype("VisionGene")
-        scaled = VISION_MIN + value * (VISION_MAX - VISION_MIN)
-        return max(VISION_MIN, min(VISION_MAX, int(round(scaled))))
-
+        v_min = int(agent.model.vision_min)
+        v_max = int(agent.model.vision_max)
+        return self._gene_trait(agent, "VisionGene", v_min, v_max)
+    
+    def can_breed(self, agent: SugarscapeAgent) -> bool:
+        return agent.sugar > 20 and super().can_breed(agent)
 
 # ============================================================
 # Shared model-level objects
@@ -64,9 +74,12 @@ EMPTY_GENOME = EmptyLociCollection(
 
 # Default agent parameters
 AGENT_PARAMS = AgentParams(
+    max_children = 1000,
+    initial_sugar=0,
     reproduction_age=10,
     reproduction_check_radius=1,
     reproduction_cooldown=5,
+    max_age=80,
 )
 
 # Agent logics instance using genes

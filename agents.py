@@ -35,9 +35,12 @@ class AgentParams:
     """
     A dataclass to hold agent parameters.
     """
+    initial_sugar: int
     reproduction_age: int
     reproduction_check_radius: int
     reproduction_cooldown: int
+    max_children: int
+    max_age: int
 
 
 class AgentLogicProtocol(Protocol):
@@ -45,7 +48,7 @@ class AgentLogicProtocol(Protocol):
     Protocol describing the pluggable agent logic behaviour.
     """
 
-    def metabolism(self, agent: SugarscapeAgent) -> int: ...
+    def metabolism(self, agent: SugarscapeAgent) -> float: ...
 
     def vision(self, agent: SugarscapeAgent) -> int: ...
 
@@ -58,6 +61,10 @@ class AgentLogicProtocol(Protocol):
     def offspring_genome(
         self, agent: SugarscapeAgent, other: SugarscapeAgent
     ) -> Genotype: ...
+
+    def sugar_donation_to_offspring(
+            self, agent: SugarscapeAgent
+    ) -> float: ...
 
 
 @dataclass(frozen=True)
@@ -72,14 +79,17 @@ class DefaultAgentLogics(AgentLogicProtocol):
     def vision(self, agent: "SugarscapeAgent") -> int:
         return agent.random.randint(1, 5)
 
-    def can_breed(self, agent: "SugarscapeAgent") -> bool:
+    def can_breed(self, agent: SugarscapeAgent) -> bool:
         has_empty = map(
             lambda c: c.is_empty,
             agent.cell.get_neighborhood(
                 agent.params.reproduction_check_radius, include_center=True
             ),
         )
-        return any(has_empty) and agent.age >= agent.params.reproduction_age
+        return (any(has_empty) and 
+                agent.age >= agent.params.reproduction_age and
+                agent.breed_cooldown == 0 and
+                agent.num_children >= agent.params.max_children)
 
     def wants_to_breed_with(
         self, agent: "SugarscapeAgent", other: "SugarscapeAgent"
@@ -92,6 +102,9 @@ class DefaultAgentLogics(AgentLogicProtocol):
         gamete1 = make_gamete(agent.genotype, AGENDER_GAMETE)
         gamete2 = make_gamete(other.genotype, AGENDER_GAMETE)
         return combine_gametes(gamete1, gamete2, AGENDER_GENOME)
+    
+    def sugar_donation_to_offspring(self, agent: SugarscapeAgent) -> float:
+        return 0.25 * agent.sugar
 
 
 class SugarscapeAgent(CellAgent):
@@ -108,7 +121,7 @@ class SugarscapeAgent(CellAgent):
         genotype: Genotype,
         params: AgentParams,
         logics: AgentLogicProtocol,
-        sugar=0,
+        sugar: float=0,
     ):
         super().__init__(model)
         self.cell: Cell = cell
@@ -120,6 +133,7 @@ class SugarscapeAgent(CellAgent):
         self.metabolism = self.logics.metabolism(self)
         self.vision = self.logics.vision(self)
         self.age = 0
+        self.num_children = 0
 
     def is_starved(self):
         """
@@ -187,7 +201,7 @@ class SugarscapeAgent(CellAgent):
         """
         Remove agents who have consumed all their sugar
         """
-        if self.is_starved():
+        if self.is_starved() or self.age >= self.params.max_age:
             self.remove()
 
     def breed_with(self, other: SugarscapeAgent) -> SugarscapeAgent:
@@ -208,7 +222,11 @@ class SugarscapeAgent(CellAgent):
             return None  # type: ignore[return-value]
 
         cell = self.random.choice(cell_candidates)
-        ini_sugar = 10
+        self_donation = self.logics.sugar_donation_to_offspring(self)
+        other_donation = other.logics.sugar_donation_to_offspring(other)
+        self.sugar -= self_donation
+        other.sugar -= other_donation
+        ini_sugar = self.params.initial_sugar + self_donation + other_donation
 
         offspring = SugarscapeAgent(
             model=self.model,
@@ -244,6 +262,8 @@ class SugarscapeAgent(CellAgent):
                 if offspring is not None:
                     self.breed_cooldown = self.params.reproduction_cooldown
                     neighbor.breed_cooldown = neighbor.params.reproduction_cooldown
+                    self.num_children += 1
+                    neighbor.num_children += 1
                     return True
         return False
 

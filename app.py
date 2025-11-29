@@ -60,7 +60,7 @@ def agent_portrayal(agent):
     return AgentPortrayalStyle(
         x=agent.cell.coordinate[0],
         y=agent.cell.coordinate[1],
-        color=num_to_color(agent.sugar, low=0, high=50),
+        color=num_to_color(agent.sugar, low=0, high=20),
         marker="o",
         size=10,
         zorder=1,
@@ -141,6 +141,14 @@ model_params = {
     "empty_genome": EMPTY_GENOME,
     "agent_params": AGENT_PARAMS,
     "agent_logics": AGENT_LOGICS,
+    # Genetic / trait parameters
+    "mutation_rate": Slider(
+        "Mutation rate", value=0.01, min=0.0, max=0.2, step=0.01
+    ),
+    "vision_min": Slider("Min Vision", value=1, min=1, max=5, step=1),
+    "vision_max": Slider("Max Vision", value=4, min=1, max=8, step=1),
+    "metabolism_min": Slider("Min Metabolism", value=1, min=1, max=5, step=1),
+    "metabolism_max": Slider("Max Metabolism", value=4, min=1, max=8, step=1),
     "seed": {
         "type": "InputText",
         "value": 42,
