@@ -71,31 +71,23 @@ def propertylayer_portrayal(layer):
     if layer.name == "sugar":
         return PropertyLayerStyle(
             color="blue",
-            alpha=0.8,
+            alpha=0.4,
             colorbar=True,
             vmin=0,
-            vmax=10,
+            vmax=4,
         )
-    # fallback, in case other layers are ever added
-    return PropertyLayerStyle(
-        color="red",
-        alpha=0.8,
-        colorbar=True,
-        vmin=0,
-        vmax=10,
-    )
 
 
-def post_process(ax):
-    ax.set_aspect("equal")
-    return ax
+def post_process(chart):
+    # Adjust overall size for the Altair space visualization
+    return chart.properties(width=500, height=500)
+
 
 
 def make_gene_freq_component(gene_name: str, page: int = 1, alpha: float = 0.6):
     """
-    Create a Matplotlib stacked area plot component for the relative
-    allele frequencies of a single gene, using data from the model's
-    DataCollector.
+    Create a Matplotlib stacked area plot component for the relative allele
+    frequencies of a single gene, using data from the model's DataCollector.
 
     The DataCollector is expected to have a model_reporter column
     named f\"{gene_name}_freqs\" that stores a 1D numpy array of
@@ -108,8 +100,10 @@ def make_gene_freq_component(gene_name: str, page: int = 1, alpha: float = 0.6):
         df = model.datacollector.get_model_vars_dataframe()
         col = f"{gene_name}_freqs"
 
-        fig = Figure(figsize=(4, 2.5))
+        # make some extra space on the right for the legend
+        fig = Figure(figsize=(5, 3))
         ax = fig.subplots()
+        fig.subplots_adjust(right=0.75, bottom=0.2, top=0.8)
 
         if col in df.columns and not df.empty:
             # Each entry in the column should be an array of allele frequencies
@@ -123,9 +117,15 @@ def make_gene_freq_component(gene_name: str, page: int = 1, alpha: float = 0.6):
                 stacks = ax.stackplot(steps, *ys, alpha=alpha)
                 ax.set_ylim(0, 1)
 
-                # Legend: one entry per allele
+                # Legend: one entry per allele, placed outside the axes
                 labels = [f"allele {i + 1}" for i in range(arr.shape[1])]
-                ax.legend(stacks, labels, loc="upper right")
+                ax.legend(
+                    stacks,
+                    labels,
+                    loc="center left",
+                    bbox_to_anchor=(1.02, 0.5),
+                    borderaxespad=0.0,
+                )
 
         ax.set_title(f"{gene_name} allele frequencies")
         ax.set_xlabel("Step")
@@ -144,6 +144,7 @@ model_params = {
     "mutation_rate": Slider(
         "Mutation rate", value=0.05, min=0.0, max=0.2, step=0.01
     ),
+    "num_alleles": Slider("Alleles", value=5, min=1, max= 10, step=1),
     "vision_min": Slider("Min Vision", value=2, min=1, max=5, step=1),
     "vision_max": Slider("Max Vision", value=5, min=1, max=8, step=1),
     "metabolism_min": Slider("Min Metabolism", value=2, min=1, max=5, step=1),
@@ -189,8 +190,8 @@ model_params = {
 # instantiate sugar-only model via helper in run.py
 model = create_model()
 
-# Space renderer (Matplotlib backend)
-renderer = SpaceRenderer(model, backend="matplotlib").render(
+# Space renderer (Altair backend)
+renderer = SpaceRenderer(model, backend="altair").render(
     agent_portrayal=agent_portrayal,
     propertylayer_portrayal=propertylayer_portrayal,
     post_process=post_process,
@@ -204,10 +205,10 @@ page = SolaraViz(
         # matches model_reporters={"#Agents": ...} in Sugarscape
         make_plot_component("#Agents", page=1),
         *[make_gene_freq_component(gene, page=1, alpha=0.5) for gene in model.gene_names],
-    ],
+    ], # type: ignore
     model_params=model_params,
     name="Sugarscape",
     play_interval=150,
 )
 
-page  # noqa
+page # type: ignore

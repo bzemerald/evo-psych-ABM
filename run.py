@@ -4,7 +4,7 @@ from genetic import EmptyLociCollection, Gene
 
 
 # ============================================================
-# Test genes
+# genes
 # ============================================================
 
 
@@ -15,16 +15,22 @@ class VisionGene(Gene):
 class MetabolismGene(Gene):
     """Gene controlling metabolism."""
 
+class StrategyGene(Gene):
+    """conbining vison and metabolism"""
+
+class FlexibilityGene(Gene):
+    """Controls the weight of nature vs nurture in decision making"""
+
 class ControlGene(Gene):
     """Neutral control gene (no direct effect used in logic)."""
 
 
 # ============================================================
-# Agent logic using genes
+# Agent logic
 # ============================================================
 
 
-class GeneticAgentLogics(DefaultAgentLogics):
+class BasicAgentLogics(DefaultAgentLogics):
     """
     Agent logics that derive metabolism and vision from genotype
     using MetabolismGene and VisionGene.
@@ -50,7 +56,7 @@ class GeneticAgentLogics(DefaultAgentLogics):
         trait = int(round(sum(values) / len(values)))
         return max(min_val, min(max_val, trait))
 
-    def metabolism(self, agent) -> int:
+    def metabolism(self, agent) -> float:
         m_min = int(agent.model.metabolism_min)
         m_max = int(agent.model.metabolism_max)
         return self._gene_trait(agent, "MetabolismGene", m_min, m_max)
@@ -63,28 +69,50 @@ class GeneticAgentLogics(DefaultAgentLogics):
     def can_breed(self, agent: SugarscapeAgent) -> bool:
         return agent.sugar > 20 and super().can_breed(agent)
 
+class StrategicAgentLogics(BasicAgentLogics):
+    def genetic_strategy(self, agent:SugarscapeAgent) -> float:
+        return agent.genotype.phenotype("StrategyGene")
+    
+    def cultural_strategy(self, agent: SugarscapeAgent) -> float:
+        return agent.random.random() #TODO
+    
+    def strategy(self, agent: SugarscapeAgent) -> float:
+        '''
+        A float between 0 to 1 to denote the foraging strategy.
+        0 -> high vision, low metabolism
+        1 -> low vision, high metabolism
+        '''
+        return self.genetic_strategy(agent)
+
+    def metabolism(self, agent: SugarscapeAgent) -> float:
+        minm, maxm = agent.params.min_metabolism, agent.params.max_metabolism
+        return minm + (maxm - minm) * self.strategy(agent)
+
+    def vision(self, agent: SugarscapeAgent) -> int:
+        minv, maxv = agent.params.min_vision, agent.params.max_vision
+        return round(minv + (maxv - minv) * self.strategy(agent))
+
+
+    
+
+class FlexibleAgentLogics(StrategicAgentLogics):
+    def strategy(self, agent: SugarscapeAgent) -> float:
+        cweight = agent.genotype.phenotype("FlexibilityGene")
+        gweight = 1 - cweight
+        return self.cultural_strategy(agent) * cweight + self.genetic_strategy(agent) * gweight
+    
+    
 # ============================================================
 # Shared model-level objects
 # ============================================================
 
-# Empty genome with our three test loci
 EMPTY_GENOME = EmptyLociCollection(
-    ["VisionGene", "MetabolismGene", "ControlGene"]
+    ["ControlGene", "StrategyGene"]
 )
 
-# Default agent parameters
-AGENT_PARAMS = AgentParams(
-    initial_sugar=0,
-    reproduction_age=10,
-    reproduction_check_radius=1,
-    reproduction_cooldown=5,
-    max_sugar=50,
-    max_children=1000,
-    max_age=80,
-)
+AGENT_PARAMS = AgentParams()
 
-# Agent logics instance using genes
-AGENT_LOGICS = GeneticAgentLogics()
+AGENT_LOGICS = StrategicAgentLogics()
 
 def create_model(**kwargs) -> Sugarscape:
     """
@@ -110,9 +138,3 @@ def create_model(**kwargs) -> Sugarscape:
     )
     params.update(kwargs)
     return Sugarscape(**params)
-
-
-if __name__ == "__main__":
-    # Example: run the model for a fixed number of steps when executed directly.
-    model = create_model()
-    model.run_model(1000)

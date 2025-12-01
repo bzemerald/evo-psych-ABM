@@ -29,19 +29,22 @@ def get_distance(cell_1, cell_2):
     dy = y1 - y2
     return math.sqrt(dx**2 + dy**2)
 
-
 @dataclass(frozen=True)
 class AgentParams:
     """
     A dataclass to hold agent parameters.
     """
-    initial_sugar: int
-    reproduction_age: int
-    reproduction_check_radius: int
-    reproduction_cooldown: int
-    max_sugar: int
-    max_children: int
-    max_age: int
+    initial_sugar: float = 0
+    reproduction_age: int = 10
+    reproduction_check_radius: int = 1
+    reproduction_cooldown: int = 5
+    min_vision: int = 2
+    max_vision: int = 5
+    min_metabolism: float = 2
+    max_metabolism: float = 5
+    max_sugar: float = 50
+    max_children: int = 1000
+    max_age: int = 80
 
 
 class AgentLogicProtocol(Protocol):
@@ -73,12 +76,13 @@ class DefaultAgentLogics(AgentLogicProtocol):
     """
     Default implementation of AgentLogicProtocol.
     """
-
-    def metabolism(self, agent: "SugarscapeAgent") -> int:
-        return agent.random.randint(1, 5)
-
-    def vision(self, agent: "SugarscapeAgent") -> int:
-        return agent.random.randint(1, 5)
+    def metabolism(self, agent: SugarscapeAgent) -> float:
+        minm, maxm = agent.params.min_metabolism, agent.params.max_metabolism
+        return minm + (maxm - minm) * agent.random.random()
+    
+    def vision(self, agent: SugarscapeAgent) -> int:
+        minv, maxv = agent.params.min_vision, agent.params.max_vision
+        return agent.random.randint(minv, maxv)
 
     def can_breed(self, agent: SugarscapeAgent) -> bool:
         has_empty = map(
@@ -93,12 +97,12 @@ class DefaultAgentLogics(AgentLogicProtocol):
                 agent.num_children <= agent.params.max_children)
 
     def wants_to_breed_with(
-        self, agent: "SugarscapeAgent", other: "SugarscapeAgent"
+        self, agent: SugarscapeAgent, other: SugarscapeAgent
     ) -> bool:
         return True
 
     def offspring_genome(
-        self, agent: "SugarscapeAgent", other: "SugarscapeAgent"
+        self, agent: SugarscapeAgent, other: SugarscapeAgent
     ) -> Genotype:
         gamete1 = make_gamete(agent.genotype, AGENDER_GAMETE)
         gamete2 = make_gamete(other.genotype, AGENDER_GAMETE)

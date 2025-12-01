@@ -49,6 +49,7 @@ class Sugarscape(mesa.Model):
         metabolism_min: int = 1,
         metabolism_max: int = 5,
         mutation_rate: float = 0.05,
+        num_alleles: int = 5,
         seed=None,
     ):
         super().__init__(seed=seed)
@@ -61,6 +62,10 @@ class Sugarscape(mesa.Model):
         self.is_gendered = empty_genome.is_gendered
         # construct AgentParams from keyword arguments
         self.agent_params = AgentParams(
+            min_vision=vision_min,
+            max_vision=vision_max,
+            min_metabolism=metabolism_min,
+            max_metabolism=metabolism_max,
             initial_sugar=initial_sugar,
             reproduction_age=reproduction_age,
             reproduction_check_radius=reproduction_check_radius,
@@ -88,6 +93,12 @@ class Sugarscape(mesa.Model):
         if metabolism_cls is not None:
             metabolism_cls.set_num_alleles(metabolism_alleles)
         self.running = True
+        control_cls = Gene.loci_registry.get("ControlGene")
+        if control_cls is not None:
+            control_cls.set_num_alleles(num_alleles)
+        strategy_cls = Gene.loci_registry.get("StrategyGene")
+        if strategy_cls is not None:
+            strategy_cls.set_num_alleles(num_alleles)
 
         # grid
         self.grid = OrthogonalVonNeumannGrid(
@@ -112,7 +123,7 @@ class Sugarscape(mesa.Model):
 
         # sugar landscape from file
         self.sugar_distribution = np.genfromtxt(
-            Path(__file__).parent / "sugar-map.txt"
+            Path(__file__).parent / "sugarmaps/two_hills.txt"
         )
 
         self.grid.add_property_layer(
