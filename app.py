@@ -144,11 +144,11 @@ model_params = {
     "mutation_rate": Slider(
         "Mutation rate", value=0.05, min=0.0, max=0.2, step=0.01
     ),
-    "num_alleles": Slider("Alleles", value=5, min=1, max= 10, step=1),
-    "vision_min": Slider("Min Vision", value=2, min=1, max=5, step=1),
-    "vision_max": Slider("Max Vision", value=5, min=1, max=8, step=1),
-    "metabolism_min": Slider("Min Metabolism", value=2, min=1, max=5, step=1),
-    "metabolism_max": Slider("Max Metabolism", value=5, min=1, max=8, step=1),
+    "num_alleles": Slider("Alleles", value=4, min=1, max= 10, step=1),
+    "vision_min": Slider("Min Vision", value=2, min=1, max=10, step=1),
+    "vision_max": Slider("Max Vision", value=5, min=1, max=20, step=1),
+    "metabolism_min": Slider("Min Metabolism", value=2, min=1, max=10, step=1),
+    "metabolism_max": Slider("Max Metabolism", value=5, min=1, max=15, step=1),
     "seed": {
         "type": "InputText",
         "value": 42,
