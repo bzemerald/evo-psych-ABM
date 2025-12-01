@@ -1,9 +1,10 @@
 from pathlib import Path
+from random import Random
 
 import numpy as np
 
 import mesa
-from mesa.discrete_space import OrthogonalVonNeumannGrid
+from mesa.discrete_space import Cell, OrthogonalVonNeumannGrid
 from mesa.discrete_space.property_layer import PropertyLayer
 from agents import SugarscapeAgent, AgentParams, AgentLogicProtocol
 from genetic import *
@@ -21,6 +22,37 @@ def geometric_mean(list_of_prices):
     find the geometric mean of a list of prices
     """
     return np.exp(np.log(list_of_prices).mean())
+
+class SugarGrid(OrthogonalVonNeumannGrid):
+    def __init__(self, 
+                dimensions,
+                sugar_map_path: str,
+                regen_amount: float,
+                regen_chance: float,
+                torus: bool = False, 
+                capacity: float | None = None, 
+                random: Random | None = None, 
+                ) -> None:
+        super().__init__(dimensions, torus, capacity, random)
+        self.regen_amount, self.regen_chance = regen_amount, regen_chance
+        self.sugar_capacity = np.genfromtxt(
+            Path(__file__).parent / sugar_map_path
+        )
+        self.add_property_layer(
+            PropertyLayer.from_data("sugar", self.sugar_capacity)
+        )
+    
+    def try_regen(self):
+        mask = rng.random(self.sugar.data.shape) < self.regen_chance
+        self.sugar.data = np.minimum(
+            self.sugar.data + self.regen_amount * mask, self.sugar_capacity
+        )
+
+    def try_shift_capacity(self):
+        pass
+
+
+    
 
 
 
@@ -101,8 +133,13 @@ class Sugarscape(mesa.Model):
             strategy_cls.set_num_alleles(num_alleles)
 
         # grid
-        self.grid = OrthogonalVonNeumannGrid(
-            (self.width, self.height), torus=False, random=self.random
+        self.grid = SugarGrid(
+            (self.width, self.height), 
+            regen_amount=1, 
+            regen_chance=1, 
+            sugar_map_path="sugarmaps/spiky.txt",
+            torus=False, 
+            random=self.random
         )
 
         # datacollector: collect agent count and allele frequencies for all genes
@@ -119,15 +156,6 @@ class Sugarscape(mesa.Model):
             agent_reporters={
                 "Sugar": lambda a: a.sugar,
             },
-        )
-
-        # sugar landscape from file
-        self.sugar_distribution = np.genfromtxt(
-            Path(__file__).parent / "sugarmaps/two_hills.txt"
-        )
-
-        self.grid.add_property_layer(
-            PropertyLayer.from_data("sugar", self.sugar_distribution)
         )
 
         # create agents
@@ -158,10 +186,8 @@ class Sugarscape(mesa.Model):
         2) move/eat/die for agents
         3) collect data
         """
-        # regenerate sugar (1 unit per step up to landscape cap)
-        self.grid.sugar.data = np.minimum(
-            self.grid.sugar.data + 1, self.sugar_distribution
-        )
+        # regenerate sugar 
+        self.grid.try_regen()
 
         # step agents
         agent_shuffle = self.agents_by_type[SugarscapeAgent].shuffle()
