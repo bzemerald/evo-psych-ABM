@@ -1,7 +1,8 @@
+from pathlib import Path
 from model import Sugarscape
 from agents import AgentParams, DefaultAgentLogics, SugarscapeAgent
 from genetic import EmptyLociCollection, Gene
-
+from mapmaker import *
 
 # ============================================================
 # genes
@@ -92,16 +93,17 @@ class StrategicAgentLogics(BasicAgentLogics):
         minv, maxv = agent.params.min_vision, agent.params.max_vision
         return round(minv + (maxv - minv) * self.strategy(agent))
 
-
-    
-
 class FlexibleAgentLogics(StrategicAgentLogics):
     def strategy(self, agent: SugarscapeAgent) -> float:
         cweight = agent.genotype.phenotype("FlexibilityGene")
         gweight = 1 - cweight
         return self.cultural_strategy(agent) * cweight + self.genetic_strategy(agent) * gweight
-    
-    
+
+
+# Map generator for dynamic sugar landscapes.
+# Use a generator that produces varying maps over time so that
+# the map cycling / transition logic in SugarGrid is visible.
+MAP_GENERATOR = spiky(50, 50, spike_size=9, spike_decrement=3, spike_freq=0.015, base=0)
 # ============================================================
 # Shared model-level objects
 # ============================================================
@@ -109,6 +111,8 @@ class FlexibleAgentLogics(StrategicAgentLogics):
 EMPTY_GENOME = EmptyLociCollection(
     ["ControlGene", "StrategyGene"]
 )
+
+INI_MAP = np.genfromtxt(Path(__file__).parent / "sugarmaps/noise.txt")
 
 AGENT_PARAMS = AgentParams()
 

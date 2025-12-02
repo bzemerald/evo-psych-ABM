@@ -146,16 +146,31 @@ model_params = {
     ),
     "num_alleles": Slider("Alleles", value=4, min=1, max= 10, step=1),
     "vision_min": Slider("Min Vision", value=2, min=1, max=10, step=1),
-    "vision_max": Slider("Max Vision", value=5, min=1, max=20, step=1),
-    "metabolism_min": Slider("Min Metabolism", value=2, min=1, max=10, step=1),
-    "metabolism_max": Slider("Max Metabolism", value=5, min=1, max=15, step=1),
+    "vision_max": Slider("Max Vision", value=15, min=1, max=20, step=1),
+    "metabolism_min": Slider("Min Metabolism", value=2, min=1, max=8, step=0.1),
+    "metabolism_max": Slider("Max Metabolism", value=3.5, min=1, max=10, step=0.1),
     "seed": {
         "type": "InputText",
         "value": 42,
         "label": "Random Seed",
     },
-    "width": 50,
-    "height": 50,
+    # Grid parameters
+    "grid_size": Slider(
+        "Grid size", value=50, min=10, max=80, step=5
+    ),
+    "new_map_cycle": Slider(
+        "Map cycle freq", value=10, min=1, max=50, step=1
+    ),
+    "new_map_transition": Slider(
+        "Map transition duration", value=4, min=1, max=30, step=1
+    ),
+    "regen_amount": Slider(
+        "Sugar regen amount", value=1, min=0, max=5, step=0.1
+    ),
+    "regen_chance": Slider(
+        "Sugar regen chance", value=1, min=0, max=1, step=0.01
+    ),
+
     # Population parameters
     "initial_population": Slider(
         "Initial Population", value=200, min=50, max=500, step=10
@@ -188,7 +203,8 @@ model_params = {
 }
 
 # instantiate sugar-only model via helper in run.py
-model = create_model()
+# Use the same defaults as the sliders for map cycling and grid size.
+model = create_model(new_map_cycle=10, new_map_transition=4, grid_size=50)
 
 # Space renderer (Altair backend)
 renderer = SpaceRenderer(model, backend="altair").render(
