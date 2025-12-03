@@ -60,7 +60,7 @@ def agent_portrayal(agent):
     return AgentPortrayalStyle(
         x=agent.cell.coordinate[0],
         y=agent.cell.coordinate[1],
-        color=num_to_color(agent.sugar, low=0, high=20),
+        color=num_to_color(agent.sugar, low=0, high=30),
         marker="o",
         size=10,
         zorder=1,
@@ -83,6 +83,61 @@ def post_process(chart):
     return chart.properties(width=500, height=500)
 
 
+def limit_0_1(ax):
+    ax.set_ylim(0, 1)
+    return ax
+
+def limit_0(ax):
+    ax.set_ylim(0)
+    return ax
+
+def make_strategy_component(page: int = 1):
+    """
+    Plot average genetic, cultural, and total strategies over time
+    as three lines on the same axes.
+    """
+
+    def component(model):
+        df = model.datacollector.get_model_vars_dataframe()
+
+        fig = Figure(figsize=(5, 3))
+        ax = fig.subplots()
+
+        if not df.empty:
+            steps = np.arange(len(df))
+
+            if "avg_genetic_strategy" in df.columns:
+                ax.plot(
+                    steps,
+                    df["avg_genetic_strategy"].values,
+                    color=BLUE,
+                    label="Genetic",
+                )
+            if "avg_cultural_strategy" in df.columns:
+                ax.plot(
+                    steps,
+                    df["avg_cultural_strategy"].values,
+                    color=ORANGE,
+                    label="Cultural",
+                )
+            if "avg_total_strategy" in df.columns:
+                ax.plot(
+                    steps,
+                    df["avg_total_strategy"].values,
+                    color=GREEN,
+                    label="Total",
+                )
+
+            ax.set_ylim(0, 1)
+            ax.legend(loc="best")
+
+        ax.set_title("Average Strategies")
+        ax.set_xlabel("Step")
+        ax.set_ylabel("Strategy")
+
+        return solara.FigureMatplotlib(fig)
+
+    return (component, page)
 
 def make_gene_freq_component(gene_name: str, page: int = 1, alpha: float = 0.6):
     """
@@ -112,9 +167,19 @@ def make_gene_freq_component(gene_name: str, page: int = 1, alpha: float = 0.6):
             if data:
                 arr = np.vstack(data)  # shape: (T, num_alleles)
                 steps = np.arange(arr.shape[0])
-                ys = [arr[:, i] for i in range(arr.shape[1])]
+                num_alleles = arr.shape[1]
+                ys = [arr[:, i] for i in range(num_alleles)]
 
-                stacks = ax.stackplot(steps, *ys, alpha=alpha)
+                # Use a smooth color gradient across alleles
+                if num_alleles > 1:
+                    colors = [
+                        map_color(i / (num_alleles - 1), BLUE, RED)
+                        for i in range(num_alleles)
+                    ]
+                else:
+                    colors = [map_color(0.5, BLUE, RED)]
+
+                stacks = ax.stackplot(steps, *ys, alpha=alpha, colors=colors)
                 ax.set_ylim(0, 1)
 
                 # Legend: one entry per allele, placed outside the axes
@@ -146,9 +211,10 @@ model_params = {
     ),
     "num_alleles": Slider("Alleles", value=4, min=1, max= 10, step=1),
     "vision_min": Slider("Min Vision", value=2, min=1, max=10, step=1),
-    "vision_max": Slider("Max Vision", value=15, min=1, max=20, step=1),
-    "metabolism_min": Slider("Min Metabolism", value=2, min=1, max=8, step=0.1),
-    "metabolism_max": Slider("Max Metabolism", value=3.5, min=1, max=10, step=0.1),
+    "vision_max": Slider("Max Vision", value=10, min=1, max=20, step=1),
+    "metabolism_min": Slider("Min Metabolism", value=1.5, min=1, max=3, step=0.1),
+    "metabolism_max": Slider("Max Metabolism", value=3.5, min=1, max=5, step=0.1),
+    "starvation_punishment": Slider("Starvation Punishment", value=1, min=0, max=3, step=0.1),
     "seed": {
         "type": "InputText",
         "value": 42,
@@ -156,19 +222,31 @@ model_params = {
     },
     # Grid parameters
     "grid_size": Slider(
-        "Grid size", value=50, min=10, max=80, step=5
+        "Grid size", value=70, min=10, max=200, step=5
     ),
     "new_map_cycle": Slider(
-        "Map cycle freq", value=10, min=1, max=50, step=1
+        "Map cycle freq", value=10, min=1, max=100, step=1
     ),
     "new_map_transition": Slider(
-        "Map transition duration", value=4, min=1, max=30, step=1
+        "Map transition duration", value=3, min=2, max=90, step=1
     ),
     "regen_amount": Slider(
-        "Sugar regen amount", value=1, min=0, max=5, step=0.1
+        "Sugar regen amount", value=2, min=0, max=5, step=0.1
     ),
     "regen_chance": Slider(
-        "Sugar regen chance", value=1, min=0, max=1, step=0.01
+        "Sugar regen chance", value=0.5, min=0, max=1, step=0.01
+    ),
+    "spike_size": Slider(
+        "Spike size", value=12, min=1, max=20, step=1
+    ),
+    "spike_decrement": Slider(
+        "Spike decrement", value=4, min=1, max=10, step=1
+    ),
+    "spike_freq": Slider(
+        "Spike frequency", value=0.01, min=0.0, max=0.2, step=0.001
+    ),
+    "base": Slider(
+        "Base sugar", value=0.0, min=0.0, max=10.0, step=0.5
     ),
 
     # Population parameters
@@ -176,23 +254,20 @@ model_params = {
         "Initial Population", value=200, min=50, max=500, step=10
     ),
     # Agent endowment parameters
-    "endowment": Slider("Initial Endowment", value=10, min=5, max=20, step=1),
+    "endowment": Slider("Initial Endowment", value=20, min=5, max=50, step=1),
 
     # Agent parameters (map directly to Sugarscape.__init__)
     "initial_sugar": Slider(
         "Newborn agents base sugar", value=0, min=-20, max=10, step=1
     ),
     "reproduction_age": Slider(
-        "Reproduction age", value=10, min=1, max=50, step=1
-    ),
-    "reproduction_check_radius": Slider(
-        "Reproduction radius", value=1, min=1, max=5, step=1
+        "Reproduction age", value=1, min=1, max=50, step=1
     ),
     "reproduction_cooldown": Slider(
-        "Reproduction cooldown", value=5, min=0, max=50, step=1
+        "Reproduction cooldown", value=1, min=0, max=50, step=1
     ),
-    "max_sugar": Slider(
-        "Max sugar", value=50, min=10, max=200, step=5
+    "min_reproduction_sugar": Slider(
+        "Min reproduction sugar", value=100, min=0, max=200, step=1
     ),
     "max_children": Slider(
         "Max children per agent", value=100, min=0, max=100, step=1
@@ -204,7 +279,7 @@ model_params = {
 
 # instantiate sugar-only model via helper in run.py
 # Use the same defaults as the sliders for map cycling and grid size.
-model = create_model(new_map_cycle=10, new_map_transition=4, grid_size=50)
+model = create_model()
 
 # Space renderer (Altair backend)
 renderer = SpaceRenderer(model, backend="altair").render(
@@ -219,7 +294,9 @@ page = SolaraViz(
     renderer,
     components=[
         # matches model_reporters={"#Agents": ...} in Sugarscape
-        make_plot_component("#Agents", page=1),
+        make_plot_component("#Agents", post_process=limit_0,page=1),
+        make_strategy_component(page=1),
+        make_plot_component("avg_flexibility_effect", post_process=limit_0_1, page=1),
         *[make_gene_freq_component(gene, page=1, alpha=0.5) for gene in model.gene_names],
     ], # type: ignore
     model_params=model_params,

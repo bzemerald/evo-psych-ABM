@@ -83,8 +83,8 @@ class SugarGrid(OrthogonalVonNeumannGrid):
     def _try_regen(self):
         mask = rng.random(self.sugar.data.shape) < self.regen_chance
         self.sugar.data = np.minimum(
-            self.sugar.data + self.regen_amount * mask, self.sugar_capacity
-        )
+            self.sugar.data + self.regen_amount * mask, self.sugar_capacity # type: ignore
+        ) 
 
     def _shift_capacity_to(self, next_map: np.ndarray, in_steps: int):
 
@@ -142,6 +142,10 @@ class Sugarscape(mesa.Model):
         map_generator: Generator | None = None,
         new_map_cycle: int = 10,
         new_map_transition: int = 4,
+        spike_size: int = 9,
+        spike_decrement: int = 3,
+        spike_freq: float = 0.05,
+        base: float = 0.0,
         ini_sugar_map=None,
 
         # Initialization params
@@ -153,8 +157,8 @@ class Sugarscape(mesa.Model):
         reproduction_age: int = 10,
         reproduction_check_radius: int = 1,
         reproduction_cooldown: int = 5,
+        min_reproduction_sugar: float = 20,
         max_age: int = 80,
-        max_sugar:int = 50,
         max_children: int = 100,
         vision_min: int = 1,
         vision_max: int = 5,
@@ -162,9 +166,18 @@ class Sugarscape(mesa.Model):
         metabolism_max: int = 5,
         mutation_rate: float = 0.05,
         num_alleles: int = 5,
+        starvation_punishment:float = 1,
         seed=None,
     ):
         super().__init__(seed=seed)
+
+        # Per-step cultural tracking
+        # Stores strategies and net sugar gains from the *previous* step.
+        self.last_step_strategies: list[float] = []
+        self.last_step_net_gains: list[float] = []
+        # Cultural strategy value used by agents in the current step.
+        self.cultural_strategy_value: float | None = None
+
         if seed:
             set_seed(seed) # sync up with numpy's rng in the genetic module
 
@@ -180,9 +193,10 @@ class Sugarscape(mesa.Model):
             map_generator = spiky(
                 self.width,
                 self.height,
-                spike_size=10,
-                spike_decrement=4,
-                spike_freq=0.01,
+                spike_size=spike_size,
+                spike_decrement=spike_decrement,
+                spike_freq=spike_freq,
+                base=base,
             )
 
         self.grid = SugarGrid(
@@ -211,9 +225,10 @@ class Sugarscape(mesa.Model):
             reproduction_age=reproduction_age,
             reproduction_check_radius=reproduction_check_radius,
             reproduction_cooldown=reproduction_cooldown,
+            min_reproduction_sugar=min_reproduction_sugar,
             max_age=max_age,
             max_children=max_children,
-            max_sugar=max_sugar
+            starvation_punishment=starvation_punishment
         )
         self.agent_logics = agent_logics
 
@@ -225,27 +240,45 @@ class Sugarscape(mesa.Model):
         self.mutation_rate = mutation_rate
         # apply mutation rate to all genes
         Gene.mutation_rate = mutation_rate
-        # dynamically set num_alleles for vision / metabolism genes
-        vision_alleles = int(self.vision_max - self.vision_min + 1)
-        metabolism_alleles = int(self.metabolism_max - self.metabolism_min + 1)
-        vision_cls = Gene.loci_registry.get("VisionGene")
-        if vision_cls is not None:
-            vision_cls.set_num_alleles(vision_alleles)
-        metabolism_cls = Gene.loci_registry.get("MetabolismGene")
-        if metabolism_cls is not None:
-            metabolism_cls.set_num_alleles(metabolism_alleles)
-        self.running = True
-        control_cls = Gene.loci_registry.get("ControlGene")
-        if control_cls is not None:
-            control_cls.set_num_alleles(num_alleles)
-        strategy_cls = Gene.loci_registry.get("StrategyGene")
-        if strategy_cls is not None:
-            strategy_cls.set_num_alleles(num_alleles)
+        for name in self.empty_genome.by_name.keys():
+            cls = Gene.loci_registry.get(name)
+            if cls is not None:
+                cls.set_num_alleles(num_alleles)
 
-        # datacollector: collect agent count and allele frequencies for all genes
+        # datacollector: collect agent count, average genetic strategy, and allele frequencies for all genes
         model_reporters: dict[str, object] = {
             "#Agents": lambda m: len(m.agents),
         }
+        model_reporters["avg_genetic_strategy"] = (
+            lambda m: np.mean(
+                [m.agent_logics.genetic_strategy(a) for a in m.agents_by_type[SugarscapeAgent]]
+            )
+            if len(m.agents_by_type[SugarscapeAgent]) > 0
+            else 0.0
+        )
+        model_reporters["avg_cultural_strategy"] = (
+            lambda m: float(m.cultural_strategy_value)
+            if getattr(m, "cultural_strategy_value", None) is not None
+            else 0.0
+        )
+        model_reporters["avg_total_strategy"] = (
+            lambda m: np.mean(
+                [m.agent_logics.strategy(a) for a in m.agents_by_type[SugarscapeAgent]]
+            )
+            if hasattr(m.agent_logics, "strategy")
+            and len(m.agents_by_type[SugarscapeAgent]) > 0
+            else 0.0
+        )
+        model_reporters["avg_flexibility_effect"] = (
+            lambda m: np.mean(
+                [
+                    a.genotype.phenotype("FlexibilityGene")
+                    for a in m.agents_by_type[SugarscapeAgent]
+                ]
+            )
+            if len(m.agents_by_type[SugarscapeAgent]) > 0
+            else 0.0
+        )
         for gene in self.gene_names:
             model_reporters[f"{gene}_freqs"] = (
                 lambda m, gene=gene: m.allele_frequencies(gene)
@@ -279,6 +312,18 @@ class Sugarscape(mesa.Model):
             sugar=endowment,
         )
 
+        # Initialize cultural strategy to the average genetic strategy
+        # so that the first step has a sensible value.
+        agents = self.agents_by_type[SugarscapeAgent]
+        if len(agents) > 0 and hasattr(self.agent_logics, "genetic_strategy"):
+            self.cultural_strategy_value = float(
+                np.mean(
+                    [self.agent_logics.genetic_strategy(a) for a in agents]  # type: ignore[attr-defined]
+                )
+            )
+        else:
+            self.cultural_strategy_value = 0.5
+
     def step(self):
         """
         Step function for Sugarscape:
@@ -286,6 +331,16 @@ class Sugarscape(mesa.Model):
         2) move/eat/die for agents
         3) collect data
         """
+        # Snapshot strategies and sugar at the beginning of the step
+        agents_start = list(self.agents_by_type[SugarscapeAgent])
+        has_strategy = hasattr(self.agent_logics, "strategy")
+        start_sugar = [a.sugar for a in agents_start]
+        start_strategies = (
+            [self.agent_logics.strategy(a) for a in agents_start]  # type: ignore[attr-defined]
+            if has_strategy
+            else []
+        )
+
         # regenerate sugar 
         self.grid.step()
 
@@ -293,11 +348,49 @@ class Sugarscape(mesa.Model):
         agent_shuffle = self.agents_by_type[SugarscapeAgent].shuffle()
 
         for agent in agent_shuffle:
-            agent.age_growth()
-            agent.move()
-            agent.eat()
-            agent.attempt_breed()
-            agent.maybe_die()
+            agent.age_growth() # type: ignore[attr-defined]
+            agent.move() # type: ignore[attr-defined]
+            agent.eat() # type: ignore[attr-defined]
+            agent.attempt_breed() # type: ignore[attr-defined]
+            agent.maybe_die() # type: ignore[attr-defined]
+
+        # Update cultural statistics based on previous step performance
+        if has_strategy and agents_start:
+            net_gains = [a.sugar - s for a, s in zip(agents_start, start_sugar)]
+            self.last_step_strategies = start_strategies
+            self.last_step_net_gains = net_gains
+
+            # Elite subset + temporal smoothing:
+            # 1) sort agents by net gain and take the top fraction as "elites"
+            # 2) compute an elite-weighted average strategy
+            # 3) update cultural strategy as an exponential moving average
+            gains_arr = np.asarray(net_gains, dtype=float)
+            if gains_arr.size > 0:
+                elite_frac = 0.2
+                k = max(1, int(len(gains_arr) * elite_frac))
+                idx_sorted = np.argsort(gains_arr)[::-1]  # descending by net gain
+                elite_idx = idx_sorted[:k]
+
+                elite_gains = gains_arr[elite_idx]
+                elite_strats = [start_strategies[i] for i in elite_idx]
+
+                # Only reward positive performers; fall back to uniform if all <= 0
+                weights = np.maximum(elite_gains, 0.0)
+                total_w = float(weights.sum())
+                if total_w > 0:
+                    elite_mean = float(np.dot(elite_strats, weights) / total_w)
+                else:
+                    elite_mean = float(np.mean(elite_strats))
+
+                # Temporal smoothing: keep cultural distinct from instantaneous genetics
+                eta = 0.5
+                prev = (
+                    float(self.cultural_strategy_value)
+                    if self.cultural_strategy_value is not None
+                    else elite_mean
+                )
+                value = (1.0 - eta) * prev + eta * elite_mean
+                self.cultural_strategy_value = max(0.0, min(1.0, value))
 
         # collect model/agent data
         self.datacollector.collect(self)

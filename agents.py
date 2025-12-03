@@ -38,13 +38,14 @@ class AgentParams:
     reproduction_age: int = 10
     reproduction_check_radius: int = 1
     reproduction_cooldown: int = 5
+    min_reproduction_sugar: float = 20
     min_vision: int = 2
     max_vision: int = 5
     min_metabolism: float = 2
     max_metabolism: float = 5
-    max_sugar: float = 50
     max_children: int = 1000
     max_age: int = 80
+    starvation_punishment: float = 1
 
 
 class AgentLogicProtocol(Protocol):
@@ -109,7 +110,9 @@ class DefaultAgentLogics(AgentLogicProtocol):
         return combine_gametes(gamete1, gamete2, AGENDER_GENOME)
     
     def sugar_donation_to_offspring(self, agent: SugarscapeAgent) -> float:
-        return 0.25 * agent.sugar
+        # Donate half of current sugar so that, after reproduction,
+        # parent and offspring split the original sugar evenly.
+        return 0.5 * agent.sugar
 
 
 class SugarscapeAgent(CellAgent):
@@ -131,7 +134,7 @@ class SugarscapeAgent(CellAgent):
         super().__init__(model)
         self.cell: Cell = cell
         self.genotype = genotype
-        self.params = params
+        self.params: AgentParams = params
         self.logics: AgentLogicProtocol = logics
         self.sugar = sugar
         self.breed_cooldown = 0
@@ -198,6 +201,8 @@ class SugarscapeAgent(CellAgent):
         """
         Harvest sugar on current cell and metabolize
         """
+        if self.cell.sugar == 0:
+            self.sugar -= self.params.starvation_punishment
         self.sugar += self.cell.sugar
         self.cell.sugar = 0
         self.sugar -= self.metabolism
@@ -206,32 +211,43 @@ class SugarscapeAgent(CellAgent):
         """
         Remove agents who have consumed all their sugar
         """
-        if self.is_starved() or self.age >= self.params.max_age:
+        if self.is_starved():
             self.remove()
 
-    def breed_with(self, other: SugarscapeAgent) -> SugarscapeAgent:
+    def attempt_breed(self) -> bool:
         """
-        Breed with another agent to produce offspring.
-
-        Assumes can_breed() and wants_to_breed_with() have been checked.
+        Asexual reproduction:
+        if this agent has enough sugar and there is an empty neighboring
+        cell, create an offspring with (mutated) copy of its genotype.
+        Returns True if breeding was successful, False otherwise.
         """
-        offspring_genome = self.logics.offspring_genome(self, other)
+        if not self.can_breed():
+            return False
 
         cell_candidates = [
             cell
-            for cell in self.cell.get_neighborhood(1, include_center=False)
+            for cell in self.cell.get_neighborhood(
+                self.params.reproduction_check_radius, include_center=False
+            )
             if cell.is_empty
         ]
         if not cell_candidates:
-            # No available cell, breeding fails gracefully.
-            return None  # type: ignore[return-value]
+            return False
 
         cell = self.random.choice(cell_candidates)
-        self_donation = self.logics.sugar_donation_to_offspring(self)
-        other_donation = other.logics.sugar_donation_to_offspring(other)
-        self.sugar -= self_donation
-        other.sugar -= other_donation
-        ini_sugar = self.params.initial_sugar + self_donation + other_donation
+
+        # Clone own genotype with possible mutations
+        names = list(self.genotype.by_name.keys())
+        genes = [
+            allele.copy()
+            for allele in sum(self.genotype.by_name.values(), start=[])
+        ]
+        offspring_genome = Genotype(names, genes, self.genotype.karyotype)
+
+        donation = self.logics.sugar_donation_to_offspring(self)
+        donation = min(donation, self.sugar)
+        self.sugar -= donation
+        ini_sugar = donation
 
         offspring = SugarscapeAgent(
             model=self.model,
@@ -242,40 +258,24 @@ class SugarscapeAgent(CellAgent):
             sugar=ini_sugar,
         )
 
-        return offspring
-
-    def attempt_breed(self) -> bool:
-        """
-        Attempt to breed with a neighboring agent within a given radius.
-        Returns True if breeding was successful, False otherwise.
-        """
-        if not self.can_breed():
-            return False
-
-        neighbors = self.cell.get_neighborhood(
-            self.params.reproduction_check_radius, include_center=False
-        ).agents
-
-        for neighbor in neighbors:
-            if (
-                isinstance(neighbor, SugarscapeAgent)
-                and neighbor.can_breed()
-                and self.wants_to_breed_with(neighbor)
-                and neighbor.wants_to_breed_with(self)
-            ):
-                offspring = self.breed_with(neighbor)
-                if offspring is not None:
-                    self.breed_cooldown = self.params.reproduction_cooldown
-                    neighbor.breed_cooldown = neighbor.params.reproduction_cooldown
-                    self.num_children += 1
-                    neighbor.num_children += 1
-                    return True
-        return False
+        self.breed_cooldown = self.params.reproduction_cooldown
+        self.num_children += 1
+        return True
 
     def can_breed(self) -> bool:
         if self.breed_cooldown > 0:
             return False
-        return self.logics.can_breed(self)
-
-    def wants_to_breed_with(self, other: SugarscapeAgent) -> bool:
-        return self.logics.wants_to_breed_with(self, other)
+        if self.sugar < self.params.min_reproduction_sugar:
+            return False
+        if self.age < self.params.reproduction_age:
+            return False
+        if self.num_children >= self.params.max_children:
+            return False
+        # Require at least one empty neighboring cell
+        has_empty = any(
+            cell.is_empty
+            for cell in self.cell.get_neighborhood(
+                self.params.reproduction_check_radius, include_center=False
+            )
+        )
+        return has_empty

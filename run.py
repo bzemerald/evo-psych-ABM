@@ -9,12 +9,11 @@ from mapmaker import *
 # ============================================================
 
 
-class VisionGene(Gene):
-    """Gene controlling vision."""
+# class VisionGene(Gene):
+#     """Gene controlling vision."""
 
-
-class MetabolismGene(Gene):
-    """Gene controlling metabolism."""
+# class MetabolismGene(Gene):
+#     """Gene controlling metabolism."""
 
 class StrategyGene(Gene):
     """conbining vison and metabolism"""
@@ -75,7 +74,22 @@ class StrategicAgentLogics(BasicAgentLogics):
         return agent.genotype.phenotype("StrategyGene")
     
     def cultural_strategy(self, agent: SugarscapeAgent) -> float:
-        return agent.random.random() #TODO
+        """
+        Cultural strategy is a shared, model-level value:
+        it is the weighted average of all agents' strategies from the
+        previous step, where each agent's weight is its net sugar gain
+        for that step (negative gains are treated as 0).
+
+        The Sugarscape model is responsible for updating
+        `cultural_strategy_value` at the end of each step.
+        """
+        model = agent.model
+        value = getattr(model, "cultural_strategy_value", None)
+        if value is None:
+            # Fallback: if the model has not yet computed a cultural value,
+            # use the agent's own genetic strategy.
+            return self.genetic_strategy(agent)
+        return float(value)
     
     def strategy(self, agent: SugarscapeAgent) -> float:
         '''
@@ -83,7 +97,7 @@ class StrategicAgentLogics(BasicAgentLogics):
         0 -> high vision, low metabolism
         1 -> low vision, high metabolism
         '''
-        return self.genetic_strategy(agent)
+        return self.cultural_strategy(agent)
 
     def metabolism(self, agent: SugarscapeAgent) -> float:
         minm, maxm = agent.params.min_metabolism, agent.params.max_metabolism
@@ -99,24 +113,19 @@ class FlexibleAgentLogics(StrategicAgentLogics):
         gweight = 1 - cweight
         return self.cultural_strategy(agent) * cweight + self.genetic_strategy(agent) * gweight
 
-
-# Map generator for dynamic sugar landscapes.
-# Use a generator that produces varying maps over time so that
-# the map cycling / transition logic in SugarGrid is visible.
-MAP_GENERATOR = spiky(50, 50, spike_size=9, spike_decrement=3, spike_freq=0.015, base=0)
 # ============================================================
 # Shared model-level objects
 # ============================================================
 
 EMPTY_GENOME = EmptyLociCollection(
-    ["ControlGene", "StrategyGene"]
+    ["ControlGene", "StrategyGene", "FlexibilityGene"]
 )
 
 INI_MAP = np.genfromtxt(Path(__file__).parent / "sugarmaps/noise.txt")
 
 AGENT_PARAMS = AgentParams()
 
-AGENT_LOGICS = StrategicAgentLogics()
+AGENT_LOGICS = FlexibleAgentLogics()
 
 def create_model(**kwargs) -> Sugarscape:
     """
@@ -136,7 +145,6 @@ def create_model(**kwargs) -> Sugarscape:
         reproduction_age=AGENT_PARAMS.reproduction_age,
         reproduction_check_radius=AGENT_PARAMS.reproduction_check_radius,
         reproduction_cooldown=AGENT_PARAMS.reproduction_cooldown,
-        max_sugar=AGENT_PARAMS.max_sugar,
         max_children=AGENT_PARAMS.max_children,
         max_age=AGENT_PARAMS.max_age,
     )

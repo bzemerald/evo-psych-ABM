@@ -346,7 +346,8 @@ FEMALE_GENOME = Karyotype(
 AGENDER_GENOME = Karyotype(
     name="agender_genome",
     alleles_per_locus={
-        "autosomal": 2,
+        # Single allele per locus (haploid-style)
+        "autosomal": 1,
         "X": 0,
         "Y": 0,
     },
