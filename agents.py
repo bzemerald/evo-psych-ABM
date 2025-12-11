@@ -35,6 +35,7 @@ class AgentParams:
     A dataclass to hold agent parameters.
     """
     initial_sugar: float = 0
+    eat_sugar_rate: float = float('inf')
     reproduction_age: int = 10
     reproduction_check_radius: int = 1
     reproduction_cooldown: int = 5
@@ -201,11 +202,16 @@ class SugarscapeAgent(CellAgent):
         """
         Harvest sugar on current cell and metabolize
         """
+        self.sugar -= self.metabolism
         if self.cell.sugar == 0:
             self.sugar -= self.params.starvation_punishment
-        self.sugar += self.cell.sugar
-        self.cell.sugar = 0
-        self.sugar -= self.metabolism
+        elif self.cell.sugar < self.params.eat_sugar_rate:
+            self.sugar += self.cell.sugar
+            self.cell.sugar = 0
+        else:
+            self.sugar += self.params.eat_sugar_rate
+            self.cell.sugar -= self.params.eat_sugar_rate
+        
 
     def maybe_die(self):
         """
@@ -263,14 +269,12 @@ class SugarscapeAgent(CellAgent):
         return True
 
     def can_breed(self) -> bool:
-        if self.breed_cooldown > 0:
+        if (self.breed_cooldown > 0 or
+            self.sugar < self.params.min_reproduction_sugar or
+            self.age < self.params.reproduction_age or
+            self.num_children >= self.params.max_children):
             return False
-        if self.sugar < self.params.min_reproduction_sugar:
-            return False
-        if self.age < self.params.reproduction_age:
-            return False
-        if self.num_children >= self.params.max_children:
-            return False
+
         # Require at least one empty neighboring cell
         has_empty = any(
             cell.is_empty

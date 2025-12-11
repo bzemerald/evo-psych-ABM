@@ -2,7 +2,6 @@ import os
 import numpy as np
 
 from scipy.ndimage import zoom
-from genetic import rng
 
 def _to_generator(func):
     def f(*args, **kwargs):
@@ -16,8 +15,9 @@ def save_to_file(array:np.ndarray, file_name:str):
     np.savetxt(out_path, array, fmt='%d', delimiter=" ")
 
 @_to_generator
-def noise(width, height, vmin=-0.5, vmax=10.0, freq=4, octaves=1):
-
+def noise(width, height, vmin=-0.5, vmax=10.0, freq=4, octaves=1, rng=None):
+    if not rng:
+        rng = np.random.default_rng()
     H = np.zeros((height, width), dtype=float)
 
     for o in range(octaves):
@@ -46,7 +46,9 @@ def noise(width, height, vmin=-0.5, vmax=10.0, freq=4, octaves=1):
     result = vmin + H * (vmax - vmin)
     return np.round(result).astype(int)
 
-def random_spikes(num, freq: float, size: int):
+def random_spikes(num, freq: float, size: int, rng=None):
+    if not rng:
+        rng = np.random.default_rng()
     mask = rng.random(num.shape) < freq
     return num + mask * size
 
@@ -54,9 +56,11 @@ def increase_and_clamp(num, increment, high=float('inf'), low=0):
     return np.minimum(high, np.maximum(num+increment, low))
 
 @_to_generator
-def spiky(width, height, spike_size, spike_decrement, spike_freq, base=0):
+def spiky(width, height, spike_size, spike_decrement, spike_freq, base=0, rng=None):
+    if not rng:
+        rng = np.random.default_rng()
     hmap = np.zeros((width, height), dtype=float)
-    hmap = random_spikes(hmap, spike_freq, spike_size)
+    hmap = random_spikes(hmap, spike_freq, spike_size, rng)
 
     while True:
         up    = np.roll(hmap, -1, axis=0)
